@@ -414,7 +414,7 @@ impl Editor {
 
     /// Open a file synchronously, or change workspace for a folder.
     pub fn open(&mut self, path: &Path) -> io::Result<()> {
-        let path = path.canonicalize()?;
+        let path = crate::paths::canonicalize(path)?;
         if path.is_dir() {
             self.tree = FileTree::new(&path)?;
             // A read-only folder can still be browsed; indexing falls back to the defaults.
@@ -441,7 +441,7 @@ impl Editor {
     /// Desktop entry point: schedule snapshotting, decoding and indexing on the
     /// I/O pool. Closing a loading tab cancels it; completion cannot resurrect it.
     pub fn request_open(&mut self, path: &Path) -> io::Result<()> {
-        let path = path.canonicalize()?;
+        let path = crate::paths::canonicalize(path)?;
         if path.is_dir() {
             return self.open(&path);
         }
@@ -738,7 +738,7 @@ impl Editor {
     }
     /// Show a folder in the tree, switching workspace if it lies outside this one.
     fn show_folder(&mut self, path: &Path) -> io::Result<()> {
-        let path = path.canonicalize()?;
+        let path = crate::paths::canonicalize(path)?;
         if !path.starts_with(&self.tree.root) {
             return self.open(&path);
         }

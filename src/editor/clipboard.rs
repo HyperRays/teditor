@@ -1,10 +1,17 @@
-//! The system clipboard, through each platform's command-line helpers.
+//! The system clipboard: the Win32 API on Windows, and command-line helpers elsewhere.
 
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+pub use windows::{read, write_with};
+
+#[cfg(not(windows))]
 use std::{
     io::{self, Write},
     process::{Command, Stdio},
 };
 
+#[cfg(not(windows))]
 pub fn read() -> io::Result<String> {
     let (program, args) = command(false)?;
     let output = Command::new(program).args(args).output()?;
@@ -13,6 +20,7 @@ pub fn read() -> io::Result<String> {
     }
     String::from_utf8(output.stdout).map_err(io::Error::other)
 }
+#[cfg(not(windows))]
 pub fn write_with(write: impl FnOnce(&mut dyn Write) -> io::Result<()>) -> io::Result<()> {
     let (program, args) = command(true)?;
     let mut child = Command::new(program)
@@ -35,6 +43,7 @@ pub fn write_with(write: impl FnOnce(&mut dyn Write) -> io::Result<()>) -> io::R
         Err(io::Error::other("Clipboard is unavailable"))
     }
 }
+#[cfg(not(windows))]
 fn command(write: bool) -> io::Result<(&'static str, Vec<&'static str>)> {
     if cfg!(target_os = "macos") {
         Ok((
@@ -59,7 +68,63 @@ fn command(write: bool) -> io::Result<(&'static str, Vec<&'static str>)> {
         }
     } else {
         Err(io::Error::other(
-            "System clipboard is supported on macOS and Linux",
+            "System clipboard is supported on macOS, Linux and Windows",
         ))
+    }
+}
+
+/// Text as the Windows clipboard holds it: UTF-16 with CRLF line endings and a final NUL.
+#[cfg(any(windows, test))]
+fn to_clipboard_text(text: &str) -> Vec<u16> {
+    let mut units = Vec::with_capacity(text.len() + 1);
+    let mut previous = '\0';
+    let mut buffer = [0; 2];
+    for character in text.chars() {
+        if character == '\n' && previous != '\r' {
+            units.push(u16::from(b'\r'));
+        }
+        units.extend_from_slice(character.encode_utf16(&mut buffer));
+        previous = character;
+    }
+    units.push(0);
+    units
+}
+
+/// The text in the Windows clipboard's data, which may have space after its NUL. Line endings
+/// become `\n`, as paste targets expect; a document converts them to its own when inserting.
+#[cfg(any(windows, test))]
+fn from_clipboard_text(units: &[u16]) -> String {
+    let end = units.iter().position(|&unit| unit == 0);
+    String::from_utf16_lossy(&units[..end.unwrap_or(units.len())]).replace("\r\n", "\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn units(text: &str) -> Vec<u16> {
+        text.encode_utf16().collect()
+    }
+
+    #[test]
+    fn windows_text_gets_crlf_endings_and_a_final_nul() {
+        assert_eq!(to_clipboard_text("a\nb\r\nc"), units("a\r\nb\r\nc\0"));
+        assert_eq!(to_clipboard_text(""), [0]);
+    }
+
+    #[test]
+    fn windows_text_keeps_characters_outside_the_basic_plane() {
+        let text = "é 👩‍💻\n日本語";
+        assert_eq!(from_clipboard_text(&to_clipboard_text(text)), text);
+    }
+
+    #[test]
+    fn windows_text_stops_at_its_nul_and_survives_bad_data() {
+        assert_eq!(from_clipboard_text(&units("one\r\ntwo\0junk")), "one\ntwo");
+        assert_eq!(
+            from_clipboard_text(&units("no terminator")),
+            "no terminator"
+        );
+        assert_eq!(from_clipboard_text(&[0xd800, u16::from(b'x')]), "\u{fffd}x");
     }
 }

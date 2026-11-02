@@ -33,7 +33,7 @@ pub struct FileTree {
 }
 impl FileTree {
     pub fn new(root: &Path) -> io::Result<Self> {
-        let root = root.canonicalize()?;
+        let root = crate::paths::canonicalize(root)?;
         if !root.is_dir() {
             return Err(io::Error::other("Workspace must be a directory"));
         }
@@ -99,7 +99,7 @@ impl FileTree {
         }
     }
     pub fn reveal(&mut self, path: &Path) {
-        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_owned());
+        let canonical = crate::paths::canonicalize(path).unwrap_or_else(|_| path.to_owned());
         let path = canonical.as_path();
         if !path.starts_with(&self.root) {
             return;

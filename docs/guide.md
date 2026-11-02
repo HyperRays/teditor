@@ -18,8 +18,10 @@ on a fixed cell grid with a custom `wgpu` renderer, and has a real shell panel p
 You need a Rust toolchain, plus:
 
 - [Zig](https://ziglang.org/) at the version `vendor/ghostty/build.zig.zon` requires (currently 0.17).
-- libclang, which Xcode provides on macOS.
-- autoconf, automake and pkg-config, to build Universal Ctags. Without them the build still succeeds, with a warning, but has no symbol lookup.
+- libclang, which Xcode provides on macOS. On Windows it comes with LLVM.
+- On macOS and Linux, autoconf, automake and pkg-config, to build Universal Ctags. Without them the build still succeeds, with a warning, but has no symbol lookup. On Windows, Zig builds it with nothing else installed.
+
+To ship a build, keep `ctags` (`ctags.exe` on Windows) and `ctags-COPYING` in the same folder as the application.
 
 ```sh
 git submodule update --init --depth 1
@@ -227,7 +229,7 @@ flag, as one character.
 - Right-to-left text (Hebrew, Arabic) is drawn left to right, and Arabic letters do not join. Each character shapes alone, so scripts that join across characters look separate.
 - CJK characters use the first installed font that has them, not one chosen for a language.
 - The terminal panel has no bold or italic, images or OSC 52 clipboard. Its Windows support is written but has not been run on Windows yet.
-- The clipboard works on macOS and Linux (`wl-copy`/`wl-paste` or `xclip`).
+- The clipboard on Linux needs `wl-copy`/`wl-paste` or `xclip` installed.
 - There is no accessibility adapter yet.
 - Jumping far into a large source file shows plain text until highlighting catches up.
 

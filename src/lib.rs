@@ -11,6 +11,7 @@
 
 #![warn(missing_docs)]
 
+mod paths;
 pub mod renderer;
 pub mod tags;
 pub mod terminal;

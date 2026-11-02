@@ -545,7 +545,7 @@ fn the_palette_finds_symbols_and_opens_them_at_their_line() {
     let doc = editor.active_document().unwrap();
     assert_eq!(
         doc.path.as_deref(),
-        Some(code.canonicalize().unwrap().as_path())
+        Some(crate::paths::canonicalize(&code).unwrap().as_path())
     );
     assert_eq!(doc.position(), [0, 3]);
     // An open file just moves its caret; Enter takes the first result.
@@ -626,7 +626,7 @@ fn cmd_clicking_a_symbol_follows_it_to_its_definition() {
     let doc = editor.active_document().unwrap();
     assert_eq!(
         doc.path.as_deref(),
-        Some(helpers.canonicalize().unwrap().as_path())
+        Some(crate::paths::canonicalize(&helpers).unwrap().as_path())
     );
     assert_eq!(doc.position(), [0, 1]);
     assert_eq!(editor.status(), "");
@@ -885,8 +885,8 @@ fn cmd_click_follows_what_the_compiler_resolved_in_a_rust_project() {
         "src/two.rs",
         "pub struct There;\nimpl There {\n    pub fn go(&self) {}\n}\n",
     );
-    let lib = lib.canonicalize().unwrap();
-    let two = two.canonicalize().unwrap();
+    let lib = crate::paths::canonicalize(&lib).unwrap();
+    let two = crate::paths::canonicalize(&two).unwrap();
     let mut editor = Editor::new(&fixture.0).unwrap();
     editor.open(&lib).unwrap();
     let mut frame = frame();
@@ -959,7 +959,7 @@ fn a_page_older_than_the_file_is_not_trusted() {
         "target/doc/src/tiny/lib.rs.html",
         "<pre class=\"rust\"><code><a href=#1 id=1 data-nosnippet>1</a>fn caller() { <a href=\"#3\">right</a>(); }\n</code></pre>",
     );
-    let lib = lib.canonicalize().unwrap();
+    let lib = crate::paths::canonicalize(&lib).unwrap();
     let mut editor = Editor::new(&fixture.0).unwrap();
     editor.open(&lib).unwrap();
     let mut frame = frame();
@@ -1095,10 +1095,12 @@ fn the_tree_follows_changes_on_disk_by_itself() {
     let keep = fixture.file("keep.txt", "");
     std::fs::create_dir(fixture.0.join("open")).unwrap();
     std::fs::create_dir(fixture.0.join("shut")).unwrap();
-    let root = fixture.0.canonicalize().unwrap();
+    let root = crate::paths::canonicalize(&fixture.0).unwrap();
     let mut editor = Editor::new(&fixture.0).unwrap();
     editor.tree.reveal_folder(&root.join("open"));
-    editor.tree.reveal(&keep.canonicalize().unwrap());
+    editor
+        .tree
+        .reveal(&crate::paths::canonicalize(&keep).unwrap());
     let mut frame = frame();
     editor.compose(&mut frame);
     let selected = |editor: &Editor| editor.tree.entries[editor.tree.selected].path.clone();
@@ -1526,7 +1528,7 @@ fn the_palette_searches_the_text_of_files() {
     let document = editor.active_document().unwrap();
     assert_eq!(
         document.path.as_deref(),
-        Some(target.canonicalize().unwrap().as_path())
+        Some(crate::paths::canonicalize(&target).unwrap().as_path())
     );
     assert_eq!(document.position(), [0, 1]);
     // A command leads there, and closing forgets the results.
@@ -1903,7 +1905,7 @@ fn mouse_tree_open_drag_selection_and_tab_switch() {
     );
     assert_eq!(
         editor.active_document().unwrap().path,
-        Some(a.canonicalize().unwrap())
+        Some(crate::paths::canonicalize(&a).unwrap())
     );
     // Editor starts at column 26, with three columns of line-number gutter.
     send(
@@ -2319,7 +2321,7 @@ fn title_bar_navigates_with_suggestions_without_overriding_typed_names() {
     send(&mut editor, &mut frame, [named(NamedKey::Enter)]);
     assert_eq!(
         editor.active_document().unwrap().path,
-        Some(main.canonicalize().unwrap())
+        Some(crate::paths::canonicalize(&main).unwrap())
     );
     assert!(!fixture.0.join("src/mai").exists());
     // The arrows pick a row, and so does clicking a file.

@@ -132,7 +132,7 @@ impl Document {
         encoding: Option<Encoding>,
         progress: &Progress,
     ) -> io::Result<Self> {
-        let path = path.canonicalize()?;
+        let path = crate::paths::canonicalize(path)?;
         let loaded = file_io::load(&path, encoding, progress)?;
         let crlf = loaded.text.line_count() > 1
             && loaded
@@ -730,11 +730,11 @@ impl Document {
         let path = destination
             .or(self.path.as_deref())
             .ok_or_else(|| io::Error::other("Choose a path with Save As"))?;
-        let parent = path
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or(Path::new("."))
-            .canonicalize()?;
+        let parent = crate::paths::canonicalize(
+            path.parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(Path::new(".")),
+        )?;
         let path = parent.join(
             path.file_name()
                 .ok_or_else(|| io::Error::other("Choose a file name"))?,

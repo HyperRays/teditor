@@ -254,6 +254,8 @@ impl SaveRequest {
                 ));
             }
             progress.check()?;
+            // Windows refuses to replace a file that is still open.
+            drop(current);
             output.persist(path).map_err(|e| e.error)?;
         } else {
             progress.check()?;

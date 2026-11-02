@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-24.04
+          - name: Windows
+            os: windows-2025
+    steps:
+      # Keep sources byte-identical to the repository on Windows.
+      - name: Configure Git
+        if: runner.os == 'Windows'
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
+
+      - name: Check out with submodules
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+
+      # Keep this at the version vendor/ghostty/build.zig.zon requires.
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.17.0
+
+      - name: Install Rust components
+        run: rustup component add clippy rustfmt
+
+      - name: Install Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake pkg-config libclang-dev \
+            mesa-vulkan-drivers xvfb libxkbcommon-x11-0
+
+      # Bindgen needs libclang, which comes with the LLVM on this runner.
+      - name: Locate libclang
+        if: runner.os == 'Windows'
+        run: Add-Content $env:GITHUB_ENV "LIBCLANG_PATH=C:\Program Files\LLVM\bin"
+
+      - name: Cache Cargo downloads and build output
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock', 'build.rs', '.gitmodules') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        if: runner.os == 'Linux'
+        run: cargo fmt --all -- --check
+
+      - name: Build
+        run: cargo build --locked --all-targets
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Test
+        if: runner.os == 'Linux'
+        timeout-minutes: 20
+        run: cargo test --locked
+
+      # Non-blocking until the tests that hard-code /bin/sh support Windows. Check this step's
+      # log, because the job stays green when it fails.
+      - name: Test (non-blocking)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        timeout-minutes: 20
+        run: cargo test --locked
+
+      # Non-blocking until they are known to pass on Mesa's software Vulkan driver.
+      - name: GPU tests (non-blocking)
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        timeout-minutes: 10
+        run: cargo test --locked --test renderer_gpu -- --ignored
+
+      # Non-blocking until it is known that the runners can open a window and present a frame.
+      - name: Smoke test on Linux (non-blocking)
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        timeout-minutes: 5
+        run: xvfb-run -a cargo run --locked -- --smoke-test
+
+      - name: Smoke test on Windows (non-blocking)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        timeout-minutes: 5
+        run: cargo run --locked -- --smoke-test

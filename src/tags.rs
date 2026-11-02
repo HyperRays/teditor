@@ -38,7 +38,7 @@ third_party
 /// The root of the project a folder belongs to: the nearest folder, starting from itself, that
 /// has a `.git` or `.teditor`. Failing that, the folder is taken to be a root.
 fn project_root(folder: &Path) -> PathBuf {
-    let folder = folder.canonicalize().unwrap_or_else(|_| folder.to_owned());
+    let folder = crate::paths::canonicalize(folder).unwrap_or_else(|_| folder.to_owned());
     folder
         .ancestors()
         .find(|path| path.join(".git").exists() || path.join(".teditor").exists())
@@ -502,7 +502,7 @@ mod tests {
             return;
         };
         let workspace = tempfile::tempdir().unwrap();
-        let root = workspace.path().canonicalize().unwrap();
+        let root = crate::paths::canonicalize(workspace.path()).unwrap();
         let write = |file: &str, name: &str| {
             let path = root.join(file);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -554,7 +554,7 @@ mod tests {
             return;
         };
         let workspace = tempfile::tempdir().unwrap();
-        let root = workspace.path().canonicalize().unwrap();
+        let root = crate::paths::canonicalize(workspace.path()).unwrap();
         let nested = root.join("src/deep");
         std::fs::create_dir_all(&nested).unwrap();
         std::fs::create_dir(root.join(".git")).unwrap();
@@ -576,7 +576,7 @@ mod tests {
         // Without a repository, an existing `.teditor` marks the root, and otherwise the
         // folder opened is one.
         let plain = tempfile::tempdir().unwrap();
-        let plain = plain.path().canonicalize().unwrap();
+        let plain = crate::paths::canonicalize(plain.path()).unwrap();
         let inner = plain.join("inner");
         std::fs::create_dir(&inner).unwrap();
         assert_eq!(ensure_ignore_file(&plain).unwrap(), plain.join(IGNORE_FILE));
@@ -601,7 +601,7 @@ mod tests {
             return;
         };
         let workspace = tempfile::tempdir().unwrap();
-        let root = workspace.path().canonicalize().unwrap();
+        let root = crate::paths::canonicalize(workspace.path()).unwrap();
         let source = "fn alpha() {}\nstruct Beta;\nimpl Beta {\n    fn gamma(&self) {}\n}\nconst DÉLTA: i32 = 1;\n";
         std::fs::write(root.join("a.rs"), source).unwrap();
         std::fs::write(root.join("b.py"), "def alpha():\n    pass\n").unwrap();
