@@ -54,7 +54,7 @@ Shortcuts are shown with Cmd; Ctrl equivalents also work.
 | Cmd+Shift+F | Find in all files |
 | Cmd+N | New document |
 | Cmd+L | Edit the path in the title bar |
-| Cmd+J | Show/hide the terminal panel |
+| Cmd+Shift+J | Show/hide the terminal panel |
 | Cmd+T | New terminal tab |
 | Cmd+S / Cmd+Shift+S | Save / Save As |
 | Cmd+W / Cmd+Q | Close tab / quit, with unsaved-change handling |

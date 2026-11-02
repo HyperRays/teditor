@@ -62,17 +62,21 @@ impl WindowState {
         let mut config = surface
             .get_default_config(&adapter, size.width.max(1), size.height.max(1))
             .ok_or("the GPU has no compatible surface configuration")?;
-        config.format = surface
+        let render_format = surface
             .get_capabilities(&adapter)
             .formats
             .into_iter()
             .find(|format| format.is_srgb())
             .ok_or("the surface has no sRGB format")?;
+        // Encode through an sRGB view of a plain swapchain. AMD's Windows Vulkan driver
+        // (seen on 24.9.1) darkens what an sRGB swapchain presents, as if decoding it again.
+        config.format = render_format.remove_srgb_suffix();
+        config.view_formats = vec![render_format];
         config.present_mode = wgpu::PresentMode::AutoVsync;
         let terminal = Terminal::new(
             &device,
             &queue,
-            config.format,
+            render_format,
             TerminalConfig {
                 viewport: [size.width, size.height],
                 scale_factor: window.scale_factor(),
@@ -177,7 +181,10 @@ impl WindowState {
             Cursor::ResizeColumns => CursorIcon::ColResize,
             Cursor::ResizeRows => CursorIcon::RowResize,
         });
-        let view = output.texture.create_view(&Default::default());
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(self.config.view_formats[0]),
+            ..Default::default()
+        });
         self.terminal.render(&view)?;
         self.window.pre_present_notify();
         self.queue.present(output);

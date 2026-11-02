@@ -77,6 +77,13 @@ fn editor_renders_tree_documents_tabs_palette_and_incremental_edits() {
             composing: false,
         })
     };
+    let toggle_terminal = || {
+        let InputEvent::Key(mut event) = key(Key::Character("j".into()), true) else {
+            unreachable!()
+        };
+        event.modifiers.shift = true;
+        InputEvent::Key(event)
+    };
     editor.handle(key(Key::Character("p".into()), true));
     editor.handle(InputEvent::Text(TextInput {
         text: "main".into(),
@@ -260,7 +267,7 @@ fn editor_renders_tree_documents_tabs_palette_and_incremental_edits() {
     editor.compose(terminal.back_mut());
     assert!(!editor.palette_open());
     // The embedded terminal, running a real shell with colored output.
-    editor.handle(key(Key::Character("j".into()), true));
+    editor.handle(toggle_terminal());
     editor.compose(terminal.back_mut());
     assert!(editor.terminal_open());
     editor.handle(InputEvent::Text(TextInput {
@@ -321,7 +328,7 @@ fn editor_renders_tree_documents_tabs_palette_and_incremental_edits() {
     preview(&mut terminal, "editor-find-preview.png");
     editor.handle(key(Key::Named(NamedKey::Escape), false));
     editor.compose(terminal.back_mut());
-    editor.handle(key(Key::Character("j".into()), true));
+    editor.handle(toggle_terminal());
     editor.compose(terminal.back_mut());
     assert!(!editor.terminal_open());
     for viewport in [[550, 260], [1100, 780]] {

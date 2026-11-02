@@ -1572,7 +1572,6 @@ fn shortcut_command(key: &KeyEvent) -> Option<Command> {
         ("w", Command::Close),
         ("q", Command::Quit),
         ("l", Command::PathBar),
-        ("j", Command::Terminal),
         ("t", Command::NewTerminal),
         ("b", Command::Files),
     ]
@@ -1580,6 +1579,8 @@ fn shortcut_command(key: &KeyEvent) -> Option<Command> {
     .find(|(name, _)| letter(key, name))
     .map(|(_, command)| command)
     .or((shift && letter(key, "e")).then_some(Command::ReopenEncoding))
+    // Shift keeps this working in a focused terminal, where Ctrl+J is the program's line feed.
+    .or((shift && letter(key, "j")).then_some(Command::Terminal))
     .or(letter(key, "f").then_some(if shift {
         Command::FindInFiles
     } else if key.modifiers.alt {

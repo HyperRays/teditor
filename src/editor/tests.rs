@@ -2430,12 +2430,38 @@ fn shell_line(sh: &'static str, cmd_exe: &'static str) -> InputEvent {
 }
 
 #[test]
+fn only_the_shifted_shortcut_toggles_the_terminal() {
+    let fixture = Fixture::new();
+    let mut editor = terminal_editor(&fixture);
+    let mut frame = frame();
+    editor.compose(&mut frame);
+
+    send(&mut editor, &mut frame, [cmd("j")]);
+    assert!(!editor.terminal_open());
+
+    send(&mut editor, &mut frame, [cmd_shift("j")]);
+    assert!(editor.terminal_open());
+    assert!(editor.terminal_focused());
+
+    // Ctrl+J is a line feed for the program in the terminal.
+    let InputEvent::Key(mut line_feed) = key(Key::Character("j".into()), false, false) else {
+        unreachable!()
+    };
+    line_feed.modifiers.control = true;
+    send(&mut editor, &mut frame, [InputEvent::Key(line_feed)]);
+    assert!(editor.terminal_open());
+
+    send(&mut editor, &mut frame, [cmd_shift("j")]);
+    assert!(!editor.terminal_open());
+}
+
+#[test]
 fn a_line_above_the_terminal_lights_up_like_a_split_divider() {
     let fixture = Fixture::new();
     let mut editor = terminal_editor(&fixture);
     let mut frame = frame();
     editor.compose(&mut frame);
-    send(&mut editor, &mut frame, [cmd("j")]);
+    send(&mut editor, &mut frame, [cmd_shift("j")]);
     let top = terminal_header(&editor);
     let line = |frame: &Framebuffer, row: u32| {
         frame
@@ -2511,7 +2537,7 @@ fn only_the_focused_pane_has_a_lit_header_line() {
     send(
         &mut editor,
         &mut frame,
-        [InputEvent::Focused(true), cmd("j")],
+        [InputEvent::Focused(true), cmd_shift("j")],
     );
     let top = terminal_header(&editor);
     // The line drawn last at a cell is the one on screen.
@@ -2556,7 +2582,7 @@ fn line_editing_keys_reach_the_terminal_program() {
     let mut editor = terminal_editor(&fixture);
     let mut frame = frame();
     editor.compose(&mut frame);
-    send(&mut editor, &mut frame, [cmd("j")]);
+    send(&mut editor, &mut frame, [cmd_shift("j")]);
     wait_for_screen(&mut editor, &mut frame, "$");
     let arrow = |code, named, modifiers| {
         InputEvent::Key(KeyEvent {
@@ -2624,7 +2650,7 @@ fn terminal_toggles_runs_commands_and_keeps_its_session_while_hidden() {
     let mut frame = frame();
     editor.compose(&mut frame);
     assert!(!editor.terminal_open());
-    send(&mut editor, &mut frame, [cmd("j")]);
+    send(&mut editor, &mut frame, [cmd_shift("j")]);
     assert!(editor.terminal_open());
     assert!(editor.terminal_focused());
     // Typing reaches the shell, not the document, and starts in the workspace.
@@ -2656,7 +2682,11 @@ fn terminal_toggles_runs_commands_and_keeps_its_session_while_hidden() {
     send(
         &mut editor,
         &mut frame,
-        [shell_line("KEPT=yes", "set KEPT=yes"), enter(), cmd("j")],
+        [
+            shell_line("KEPT=yes", "set KEPT=yes"),
+            enter(),
+            cmd_shift("j"),
+        ],
     );
     assert!(!editor.terminal_open());
     assert!(!screen_text(&frame).contains("out-42"));
@@ -2669,7 +2699,7 @@ fn terminal_toggles_runs_commands_and_keeps_its_session_while_hidden() {
         &mut editor,
         &mut frame,
         [
-            cmd("j"),
+            cmd_shift("j"),
             shell_line("echo was-$KEPT", "echo was-%KEPT%"),
             enter(),
         ],
@@ -2700,7 +2730,7 @@ fn terminal_toggles_runs_commands_and_keeps_its_session_while_hidden() {
         &mut editor,
         &mut frame,
         [
-            cmd("j"),
+            cmd_shift("j"),
             shell_line("echo fresh-$KEPT.", "if not defined KEPT echo fr^esh-."),
             enter(),
         ],
@@ -2792,10 +2822,10 @@ fn terminal_tabs_run_separate_shells_that_keep_working_in_the_background() {
     assert_eq!(editor.active_terminal, 1);
 
     // Hiding keeps every tab, and showing returns to the same one.
-    send(&mut editor, &mut frame, [cmd("j")]);
+    send(&mut editor, &mut frame, [cmd_shift("j")]);
     assert!(!editor.terminal_open());
     assert_eq!(editor.terminals.len(), 2);
-    send(&mut editor, &mut frame, [cmd("j")]);
+    send(&mut editor, &mut frame, [cmd_shift("j")]);
     assert_eq!(editor.active_terminal, 1);
     wait_for_screen(&mut editor, &mut frame, "second-[]");
 
@@ -2818,7 +2848,7 @@ fn terminal_tab_row_works_with_the_mouse_and_cmd_w_closes_the_focused_kind_of_ta
     editor.open(&path).unwrap();
     let mut frame = frame();
     editor.compose(&mut frame);
-    send(&mut editor, &mut frame, [cmd("j")]);
+    send(&mut editor, &mut frame, [cmd_shift("j")]);
     let header = terminal_header(&editor);
     assert!(
         row(&frame, header).contains('×'),
@@ -2858,7 +2888,11 @@ fn the_terminal_shows_whole_graphemes_from_a_real_shell() {
     editor.compose(&mut frame);
     // Octal escapes, so the clusters only exist once the shell has printed them.
     let printf = "printf 'cafe\\314\\201.\\360\\237\\221\\251\\342\\200\\215\\360\\237\\222\\273.\\360\\237\\207\\251\\360\\237\\207\\252.\\n'";
-    send(&mut editor, &mut frame, [cmd("j"), text(printf), enter()]);
+    send(
+        &mut editor,
+        &mut frame,
+        [cmd_shift("j"), text(printf), enter()],
+    );
     let shows = |frame: &Framebuffer, wanted: &str| {
         (0..30).any(|y| {
             row(frame, y)
@@ -2989,7 +3023,7 @@ fn palette_opened_from_the_terminal_returns_there_and_small_windows_survive() {
     let mut editor = terminal_editor(&fixture);
     let mut frame = frame();
     editor.compose(&mut frame);
-    send(&mut editor, &mut frame, [cmd("j"), cmd("p")]);
+    send(&mut editor, &mut frame, [cmd_shift("j"), cmd("p")]);
     assert!(editor.palette_open());
     assert!(screen_text(&frame).contains("Toggle terminal"));
     send(&mut editor, &mut frame, [named(NamedKey::Escape)]);
@@ -3012,7 +3046,7 @@ fn terminal_cursor_follows_a_program_that_only_moves_it() {
     }
     let mut frame = frame();
     editor.compose(&mut frame);
-    send(&mut editor, &mut frame, [cmd("j")]);
+    send(&mut editor, &mut frame, [cmd_shift("j")]);
     wait_for_screen(&mut editor, &mut frame, "$ ");
     send(&mut editor, &mut frame, [text("abcd")]);
     wait_for_screen(&mut editor, &mut frame, "abcd");
@@ -3074,7 +3108,7 @@ fn wide_characters_take_two_columns_in_documents_and_the_terminal() {
     send(&mut editor, &mut frame, [named(NamedKey::ArrowDown)]);
     assert_eq!(editor.active_document().unwrap().position(), [3, 1]);
     // The terminal takes the width from Ghostty and keeps the next character aligned.
-    send(&mut editor, &mut frame, [cmd("j")]);
+    send(&mut editor, &mut frame, [cmd_shift("j")]);
     wait_for_screen(&mut editor, &mut frame, "$ ");
     send(
         &mut editor,

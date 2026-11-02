@@ -64,6 +64,14 @@ fn zig() -> OsString {
     env::var_os("ZIG").unwrap_or_else(|| "zig".into())
 }
 
+/// Zig's clang searches `CPATH` ahead of its own headers, and headers from another compiler
+/// there, such as Visual Studio's, break its C and C++ compilation.
+fn zig_command() -> Command {
+    let mut command = Command::new(zig());
+    command.env_remove("CPATH");
+    command
+}
+
 /// Compile ctags in a copy of its source, so the submodule stays clean, with every optional
 /// library turned off so that the binary has no licences to account for but its own. It is
 /// the same program for every Rust profile, so one build in the target folder serves them all.
@@ -137,7 +145,7 @@ fn compile_ctags_with_zig(source: &Path, build: &Path) -> Result<(), String> {
 
     // The parser generator runs here, so it is built for this machine, not the target.
     let packcc = build.join(format!("packcc{}", env::consts::EXE_SUFFIX));
-    run(Command::new(zig())
+    run(zig_command()
         .current_dir(build)
         .args(["cc", "-O1", "-w", "-std=gnu99", "-o"])
         .arg(&packcc)
@@ -162,7 +170,7 @@ fn compile_ctags_with_zig(source: &Path, build: &Path) -> Result<(), String> {
     )
     .map_err(write_error)?;
     sources.push("manifest.rc".into());
-    run(Command::new(zig())
+    run(zig_command()
         .current_dir(build)
         .args(["cc", "-target", &format!("{architecture}-windows-gnu")])
         .args(["-O2", "-s", "-w", "-std=gnu99", "-fno-sanitize=undefined"])
@@ -267,7 +275,7 @@ fn run(command: &mut Command) -> Result<(), String> {
 
 fn build_library(source: &Path, out: &Path) -> PathBuf {
     let prefix = out.join("ghostty");
-    let status = Command::new(zig())
+    let status = zig_command()
         .current_dir(source)
         .args(["build", "-Demit-lib-vt=true", "-Doptimize=ReleaseFast"])
         .args(zig_target().map(|target| format!("-Dtarget={target}")))

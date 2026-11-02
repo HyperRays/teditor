@@ -91,7 +91,7 @@ impl StatusBar {
         canvas.fill(CellRect::new(0, 0, width, 1), muted);
         let palette_keys = format!("{}+P", primary_name());
         let save_keys = format!("{}+S", primary_name());
-        let terminal_keys = format!("{}+J", primary_name());
+        let terminal_keys = format!("{}+Shift+J", primary_name());
         let chip = |keys, label, tone, action| Chip {
             keys,
             label,

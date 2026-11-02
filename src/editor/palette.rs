@@ -89,7 +89,7 @@ impl Command {
             Self::Editor => return Some("F6".into()),
             Self::Palette => "P",
             Self::PathBar => "L",
-            Self::Terminal => "J",
+            Self::Terminal => "Shift+J",
             Self::Find => "F",
             Self::Replace => "Alt+F",
             Self::FindInFiles => "Shift+F",
