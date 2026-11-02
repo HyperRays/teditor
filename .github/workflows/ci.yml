@@ -103,7 +103,7 @@ jobs:
         run: xvfb-run -a cargo run --locked -- --smoke-test
 
       - name: Smoke test on Windows (non-blocking)
-        if: runner.os == 'Windows'
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
         continue-on-error: true
         timeout-minutes: 5
         run: cargo run --locked -- --smoke-test

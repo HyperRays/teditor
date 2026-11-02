@@ -326,18 +326,18 @@ fn scrollback_moves_the_viewport_and_returns_to_the_bottom() {
 fn session_runs_a_real_program_through_the_pty_and_reports_exit() {
     let wakes = Arc::new(AtomicUsize::new(0));
     let counter = wakes.clone();
-    let (shell, input, sizes): (&str, &[u8], &[&str]) = if cfg!(windows) {
+    let (shell, input, expected): (&str, &[u8], &[&str]) = if cfg!(windows) {
         // Clearing first leaves everything within the ten rows.
         (
             "cmd.exe",
-            b"cls & set /a N=40+2 >nul & call echo sum-%N% & mode con | findstr \"Lines Columns\"\r\nexit\r\n",
-            &[" 10", " 60"],
+            b"cls & set /a N=40+2 >nul & call echo sum-%N% & mode con | findstr \"Lines Columns\"\r\n",
+            &[" 10", " 60", "sum-42"],
         )
     } else {
         (
             "/bin/sh",
-            b"stty size; echo sum-$((40+2))\nexit\n",
-            &["10 60"],
+            b"stty size; echo sum-$((40+2))\n",
+            &["10 60", "sum-42"],
         )
     };
     let mut session = Session::spawn(
@@ -351,18 +351,28 @@ fn session_runs_a_real_program_through_the_pty_and_reports_exit() {
     )
     .unwrap();
     session.send(input.to_vec());
+    // All of it before exiting: a pseudo-console draws later, and may not finish once it has.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        session.pump();
+        session.vt.sync().unwrap();
+        let screen: String = (0..10).map(|y| line(&session.vt, y) + "\n").collect();
+        if expected.iter().all(|text| screen.contains(text)) {
+            break;
+        }
+        assert!(Instant::now() < deadline, "missing output: {screen}");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    session.send(if cfg!(windows) {
+        b"exit\r\n".to_vec()
+    } else {
+        b"exit\n".to_vec()
+    });
     let deadline = Instant::now() + Duration::from_secs(10);
     while !session.exited() {
         assert!(Instant::now() < deadline, "the shell did not exit");
         session.pump();
         std::thread::sleep(Duration::from_millis(2));
     }
-    while session.pump() {}
-    session.vt.sync().unwrap();
-    let screen: String = (0..10).map(|y| line(&session.vt, y) + "\n").collect();
-    for size in sizes {
-        assert!(screen.contains(size), "pty size not applied: {screen}");
-    }
-    assert!(screen.contains("sum-42"), "{screen}");
     assert!(wakes.load(Ordering::Relaxed) > 0);
 }
