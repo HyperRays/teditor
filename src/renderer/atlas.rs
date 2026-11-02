@@ -133,7 +133,7 @@ impl Atlas {
             if c == 4 {
                 // Premultiply in linear space BEFORE filtering, so the RGB of
                 // transparent texels cannot produce colored fringes on images.
-                for pixel in padded[start..start + source.len()].chunks_exact_mut(4) {
+                for pixel in padded[start..start + source.len()].as_chunks_mut::<4>().0 {
                     let linear = Color(pixel[0], pixel[1], pixel[2], pixel[3]).linear();
                     for channel in 0..3 {
                         pixel[channel] = encode_srgb(linear[channel] * linear[3]);

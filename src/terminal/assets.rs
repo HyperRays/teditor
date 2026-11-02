@@ -208,7 +208,7 @@ pub fn read_png(path: impl AsRef<Path>) -> Result<([u32; 2], Vec<u8>), AssetErro
     match output.color_type {
         png::ColorType::Rgba => rgba.extend_from_slice(bytes),
         png::ColorType::Rgb => {
-            for p in bytes.chunks_exact(3) {
+            for p in bytes.as_chunks::<3>().0 {
                 rgba.extend_from_slice(&[p[0], p[1], p[2], 255]);
             }
         }
@@ -218,7 +218,7 @@ pub fn read_png(path: impl AsRef<Path>) -> Result<([u32; 2], Vec<u8>), AssetErro
             }
         }
         png::ColorType::GrayscaleAlpha => {
-            for p in bytes.chunks_exact(2) {
+            for p in bytes.as_chunks::<2>().0 {
                 rgba.extend_from_slice(&[p[0], p[0], p[0], p[1]]);
             }
         }

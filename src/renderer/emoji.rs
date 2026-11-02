@@ -63,7 +63,9 @@ fn decode(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     let rgba = match output.color_type {
         png::ColorType::Rgba => bytes.to_vec(),
         png::ColorType::Rgb => bytes
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[1], p[2], 255])
             .collect(),
         _ => return None,
@@ -124,7 +126,7 @@ mod tests {
         assert!(image.display[1] <= 51);
         assert_eq!((image.width, image.height), (40, image.display[1]));
         assert_eq!(image.rgba.len() as u32, image.width * image.height * 4);
-        let pixels = || image.rgba.chunks_exact(4);
+        let pixels = || image.rgba.as_chunks::<4>().0.iter();
         assert!(pixels().any(|p| p[3] == 255), "has opaque pixels");
         assert!(pixels().any(|p| p[3] == 0), "keeps transparent corners");
         assert!(
@@ -160,8 +162,8 @@ mod tests {
     fn shrinking_a_uniform_image_preserves_its_color() {
         let rgba = [200, 100, 50, 255].repeat(100);
         let out = shrink(&rgba, [10, 10], [3, 3]);
-        for pixel in out.chunks_exact(4) {
-            assert_eq!(pixel, [200, 100, 50, 255]);
+        for pixel in out.as_chunks::<4>().0 {
+            assert_eq!(*pixel, [200, 100, 50, 255]);
         }
     }
 

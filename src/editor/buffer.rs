@@ -202,7 +202,7 @@ impl LineIndex {
             counts.reserve(text.len() / LINE_INDEX_BYTES + 1);
             counts.push(0);
             let mut count = 0;
-            for block in text.as_bytes().chunks_exact(LINE_INDEX_BYTES) {
+            for block in text.as_bytes().as_chunks::<LINE_INDEX_BYTES>().0 {
                 count += block.iter().filter(|&&b| b == b'\n').count() as u16;
                 counts.push(count);
             }

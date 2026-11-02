@@ -51,8 +51,9 @@ jobs:
         with:
           version: 0.17.0
 
-      - name: Install Rust components
-        run: rustup component add clippy rustfmt
+      # Installs what rust-toolchain.toml names.
+      - name: Install Rust
+        run: rustup toolchain install
 
       - name: Install Linux packages
         if: runner.os == 'Linux'
@@ -73,7 +74,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock', 'build.rs', '.gitmodules') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'build.rs', '.gitmodules') }}
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Check formatting
@@ -82,9 +83,6 @@ jobs:
 
       - name: Build
         run: cargo build --locked --all-targets
-
-      - name: Clippy
-        run: cargo clippy --locked --all-targets -- -D warnings
 
       - name: Test
         if: runner.os == 'Linux'
@@ -101,14 +99,14 @@ jobs:
 
       # Non-blocking until they are known to pass on Mesa's software Vulkan driver.
       - name: GPU tests (non-blocking)
-        if: runner.os == 'Linux'
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
         continue-on-error: true
         timeout-minutes: 10
         run: cargo test --locked --test renderer_gpu -- --ignored
 
       # Non-blocking until it is known that the runners can open a window and present a frame.
       - name: Smoke test on Linux (non-blocking)
-        if: runner.os == 'Linux'
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
         continue-on-error: true
         timeout-minutes: 5
         run: xvfb-run -a cargo run --locked -- --smoke-test
@@ -118,3 +116,8 @@ jobs:
         continue-on-error: true
         timeout-minutes: 5
         run: cargo run --locked -- --smoke-test
+
+      # Last, and even after a test failure, so neither result hides the other.
+      - name: Clippy
+        if: ${{ !cancelled() }}
+        run: cargo clippy --locked --all-targets -- -D warnings

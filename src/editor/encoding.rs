@@ -141,8 +141,14 @@ pub fn detect(sample: &[u8]) -> Encoding {
     // BOM-less Unicode: require strong positional NUL evidence, not just NULs.
     let groups = sample.len() / 4;
     if groups >= 4 {
-        let zeroes: [usize; 4] =
-            std::array::from_fn(|i| sample.chunks_exact(4).filter(|g| g[i] == 0).count());
+        let zeroes: [usize; 4] = std::array::from_fn(|i| {
+            sample
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .filter(|g| g[i] == 0)
+                .count()
+        });
         let high = |i| zeroes[i] * 10 > groups * 8;
         let low = |i| zeroes[i] * 10 < groups * 2;
         if low(0) && high(1) && high(2) && high(3) {
@@ -199,11 +205,11 @@ pub(crate) fn decode(
             source.read_chunks(skip, |offset, input| {
                 progress.advance(offset as u64)?;
                 let mut used = 0;
-                for raw in input.chunks_exact(4) {
+                for raw in input.as_chunks::<4>().0 {
                     let value = if encoding == Encoding::Utf32Le {
-                        u32::from_le_bytes(raw.try_into().unwrap())
+                        u32::from_le_bytes(*raw)
                     } else {
-                        u32::from_be_bytes(raw.try_into().unwrap())
+                        u32::from_be_bytes(*raw)
                     };
                     used += char::from_u32(value)
                         .ok_or_else(|| invalid(encoding, offset))?

@@ -1092,7 +1092,7 @@ fn renders_clipped_layers_glyphs_bitmaps_and_dpi_changes() {
     // Empty frames still clear the complete target, including the grid's padding.
     renderer.render(&view, size, &Frame::new(clear)).unwrap();
     let pixels = readback(&device, &queue, &texture, size);
-    for pixel in pixels.chunks_exact(4) {
+    for pixel in pixels.as_chunks::<4>().0 {
         for (actual, expected) in pixel.iter().zip([12, 23, 34, 255]) {
             assert!(actual.abs_diff(expected) <= 1);
         }

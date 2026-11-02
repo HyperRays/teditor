@@ -49,7 +49,8 @@ pub(super) fn spawn(command: &[String], cwd: &Path, size: [u16; 2]) -> io::Resul
             &mut slave,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            &mut winsize,
+            // Linux takes a const pointer here and macOS a mutable one; this suits both.
+            &raw mut winsize,
         )
     })?;
     // SAFETY: openpty returned these descriptors and nothing else owns them.
