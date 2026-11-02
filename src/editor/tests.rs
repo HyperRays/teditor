@@ -2411,10 +2411,22 @@ fn enter() -> InputEvent {
 fn terminal_header(editor: &Editor) -> u32 {
     editor.context.pane_rect("terminal").unwrap().row
 }
+/// An editor whose terminal runs a plain shell with `$ ` as its prompt. Windows has no `sh`, so
+/// its tests run `cmd.exe`, with this prompt set to match.
 fn terminal_editor(fixture: &Fixture) -> Editor {
     let mut editor = Editor::new(&fixture.0).unwrap();
-    editor.shell = vec!["/bin/sh".into()];
+    editor.shell = if cfg!(windows) {
+        ["cmd.exe", "/d", "/k", "prompt $$ "].map(Into::into).into()
+    } else {
+        vec!["/bin/sh".into()]
+    };
     editor
+}
+/// A command line for the test shell, whose expected output must not appear in the line itself:
+/// that would be found as soon as it was typed. For `cmd.exe`, `call` expands a variable set
+/// earlier on the same line, and `^` is dropped from what `echo` prints.
+fn shell_line(sh: &'static str, cmd_exe: &'static str) -> InputEvent {
+    text(if cfg!(windows) { cmd_exe } else { sh })
 }
 
 #[test]
@@ -2535,7 +2547,9 @@ fn only_the_focused_pane_has_a_lit_header_line() {
     assert_eq!(lit(&frame), [false, false, false], "unfocused window");
 }
 
-/// Keys that move in a line reach the program, including those with Cmd.
+/// Keys that move in a line reach the program, including those with Cmd. This reads them with
+/// `cat -v`, and Windows has no equivalent.
+#[cfg(unix)]
 #[test]
 fn line_editing_keys_reach_the_terminal_program() {
     let fixture = Fixture::new();
@@ -2617,7 +2631,13 @@ fn terminal_toggles_runs_commands_and_keeps_its_session_while_hidden() {
     send(
         &mut editor,
         &mut frame,
-        [text("echo out-$((40+2)); pwd"), enter()],
+        [
+            shell_line(
+                "echo out-$((40+2)); pwd",
+                "set /a N=40+2 >nul & call echo out-%N% & cd",
+            ),
+            enter(),
+        ],
     );
     wait_for_screen(&mut editor, &mut frame, "out-42");
     wait_for_screen(&mut editor, &mut frame, "teditor-editor-");
@@ -2636,7 +2656,7 @@ fn terminal_toggles_runs_commands_and_keeps_its_session_while_hidden() {
     send(
         &mut editor,
         &mut frame,
-        [text("KEPT=yes"), enter(), cmd("j")],
+        [shell_line("KEPT=yes", "set KEPT=yes"), enter(), cmd("j")],
     );
     assert!(!editor.terminal_open());
     assert!(!screen_text(&frame).contains("out-42"));
@@ -2648,7 +2668,11 @@ fn terminal_toggles_runs_commands_and_keeps_its_session_while_hidden() {
     send(
         &mut editor,
         &mut frame,
-        [cmd("j"), text("echo was-$KEPT"), enter()],
+        [
+            cmd("j"),
+            shell_line("echo was-$KEPT", "echo was-%KEPT%"),
+            enter(),
+        ],
     );
     wait_for_screen(&mut editor, &mut frame, "was-yes");
     // Exiting the shell closes the panel and returns the keyboard; the next toggle is fresh.
@@ -2675,7 +2699,11 @@ fn terminal_toggles_runs_commands_and_keeps_its_session_while_hidden() {
     send(
         &mut editor,
         &mut frame,
-        [cmd("j"), text("echo fresh-$KEPT."), enter()],
+        [
+            cmd("j"),
+            shell_line("echo fresh-$KEPT.", "if not defined KEPT echo fr^esh-."),
+            enter(),
+        ],
     );
     wait_for_screen(&mut editor, &mut frame, "fresh-.");
 }
@@ -2703,14 +2731,28 @@ fn terminal_tabs_run_separate_shells_that_keep_working_in_the_background() {
     send(
         &mut editor,
         &mut frame,
-        [cmd("t"), text("FIRST=one; echo tab-$FIRST"), enter()],
+        [
+            cmd("t"),
+            shell_line(
+                "FIRST=one; echo tab-$FIRST",
+                "set FIRST=one& call echo tab-%FIRST%",
+            ),
+            enter(),
+        ],
     );
     assert!(editor.terminal_open());
     wait_for_screen(&mut editor, &mut frame, "tab-one");
     send(
         &mut editor,
         &mut frame,
-        [cmd("t"), text("echo second-[$FIRST]"), enter()],
+        [
+            cmd("t"),
+            shell_line(
+                "echo second-[$FIRST]",
+                "if not defined FIRST echo second-[^]",
+            ),
+            enter(),
+        ],
     );
     assert_eq!(editor.terminals.len(), 2);
     wait_for_screen(&mut editor, &mut frame, "second-[]");
@@ -2725,7 +2767,10 @@ fn terminal_tabs_run_separate_shells_that_keep_working_in_the_background() {
         &mut frame,
         [
             cmd("1"),
-            text("sleep 0.2; echo finished-in-background"),
+            shell_line(
+                "sleep 0.2; echo finished-in-background",
+                "ping -n 2 127.0.0.1 >nul & echo finished-in-background",
+            ),
             enter(),
         ],
     );
@@ -2803,6 +2848,8 @@ fn terminal_tab_row_works_with_the_mouse_and_cmd_w_closes_the_focused_kind_of_ta
     assert_eq!(editor.tab_count(), 0);
 }
 
+/// `printf` builds the clusters from octal escapes, and `cmd.exe` has no way to.
+#[cfg(unix)]
 #[test]
 fn the_terminal_shows_whole_graphemes_from_a_real_shell() {
     let fixture = Fixture::new();
@@ -2849,7 +2896,13 @@ fn terminal_panel_works_with_the_mouse_and_keeps_ctrl_for_the_program() {
     send(
         &mut editor,
         &mut frame,
-        [text("echo go-$((1+1)); sleep 100"), enter()],
+        [
+            shell_line(
+                "echo go-$((1+1)); sleep 100",
+                "set /a N=1+1 >nul & call echo go-%N% & ping -n 100 127.0.0.1 >nul",
+            ),
+            enter(),
+        ],
     );
     wait_for_screen(&mut editor, &mut frame, "go-2");
     let ctrl_c = InputEvent::Key(KeyEvent {
@@ -2882,7 +2935,13 @@ fn terminal_panel_works_with_the_mouse_and_keeps_ctrl_for_the_program() {
     send(
         &mut editor,
         &mut frame,
-        [text("echo after-$((1+1))"), enter()],
+        [
+            shell_line(
+                "echo after-$((1+1))",
+                "set /a N=1+1 >nul & call echo after-%N%",
+            ),
+            enter(),
+        ],
     );
     wait_for_screen(&mut editor, &mut frame, "after-2");
     // Clicking the editor moves the keyboard there; clicking the panel moves it back.
@@ -2946,9 +3005,11 @@ fn terminal_cursor_follows_a_program_that_only_moves_it() {
     let fixture = Fixture::new();
     let mut editor = terminal_editor(&fixture);
     // Pressing Left needs line editing, which `/bin/sh` lacks where it is dash, as on Ubuntu.
-    editor.shell = ["/bin/bash", "--norc", "--noprofile"]
-        .map(Into::into)
-        .into();
+    if cfg!(unix) {
+        editor.shell = ["/bin/bash", "--norc", "--noprofile"]
+            .map(Into::into)
+            .into();
+    }
     let mut frame = frame();
     editor.compose(&mut frame);
     send(&mut editor, &mut frame, [cmd("j")]);
@@ -3018,7 +3079,10 @@ fn wide_characters_take_two_columns_in_documents_and_the_terminal() {
     send(
         &mut editor,
         &mut frame,
-        [text("printf 'x\\360\\237\\216\\211y\\n'"), enter()],
+        [
+            shell_line("printf 'x\\360\\237\\216\\211y\\n'", "echo x\u{1F389}y"),
+            enter(),
+        ],
     );
     wait_for_screen(&mut editor, &mut frame, "x\u{1F389}\0y");
 }

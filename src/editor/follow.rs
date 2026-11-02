@@ -16,7 +16,7 @@ use std::{
         Arc, Condvar, Mutex, OnceLock, Weak,
         atomic::{AtomicBool, Ordering},
     },
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -154,6 +154,27 @@ impl Tail {
 /// A path's size and time, which change along with it.
 type Stamp = (u64, Option<SystemTime>);
 
+/// How long a folder's time can stay the same across changes inside it. Times are coarse, by
+/// up to two seconds depending on the file system, so a change just after a recent time may
+/// not alter it.
+const TIME_GRANULARITY: Duration = Duration::from_secs(2);
+
+/// When to look at a folder once more, if its time is too recent to rule out later changes.
+fn recheck_after(stamp: Stamp) -> Option<Instant> {
+    let age = SystemTime::now()
+        .duration_since(stamp.1?)
+        .unwrap_or(Duration::ZERO);
+    Some(Instant::now() + TIME_GRANULARITY.checked_sub(age)?)
+}
+
+/// What a watch last saw.
+struct Seen {
+    /// The size and time; `None` until first checked.
+    stamp: Option<Stamp>,
+    /// When to report a change even if the stamp stays the same.
+    recheck: Option<Instant>,
+}
+
 fn snapshot(path: &Path) -> Option<Stamp> {
     let metadata = fs::metadata(path).ok()?;
     Some((metadata.len(), metadata.modified().ok()))
@@ -163,8 +184,10 @@ fn snapshot(path: &Path) -> Option<Stamp> {
 /// it is added, removed or renamed. Dropping this stops the watching.
 pub(super) struct Watch {
     path: PathBuf,
-    /// The size and time last seen; `None` until first checked.
-    seen: Mutex<Option<Stamp>>,
+    seen: Mutex<Seen>,
+    /// Whether this is a folder, where a stamp cannot rule out a later change. A file's size
+    /// and contents are checked when it reads again, and a folder's are not.
+    is_folder: bool,
     changed: AtomicBool,
     waker: Waker,
 }
@@ -173,19 +196,23 @@ impl Watch {
     /// Start watching. The first check always reports a change, which closes any gap
     /// between the file being read and the watch starting.
     pub fn start(path: &Path, waker: Waker) -> Arc<Self> {
-        Self::register(path, None, waker)
+        Self::register(path, None, false, waker)
     }
 
     /// Start watching, reporting only changes from now on. The caller reads the path afterward,
     /// so that nothing can change unseen in between.
     pub fn start_from_now(path: &Path, waker: Waker) -> Arc<Self> {
-        Self::register(path, snapshot(path), waker)
+        Self::register(path, snapshot(path), true, waker)
     }
 
-    fn register(path: &Path, seen: Option<Stamp>, waker: Waker) -> Arc<Self> {
+    fn register(path: &Path, stamp: Option<Stamp>, is_folder: bool, waker: Waker) -> Arc<Self> {
         let watch = Arc::new(Self {
             path: path.to_owned(),
-            seen: Mutex::new(seen),
+            seen: Mutex::new(Seen {
+                stamp,
+                recheck: stamp.filter(|_| is_folder).and_then(recheck_after),
+            }),
+            is_folder,
             changed: AtomicBool::new(false),
             waker,
         });
@@ -221,12 +248,17 @@ impl Watch {
             return;
         };
         let mut seen = self.seen.lock().unwrap();
-        if *seen != Some(now) {
-            *seen = Some(now);
-            drop(seen);
-            self.mark_changed();
-            (self.waker)();
+        if seen.stamp != Some(now) {
+            seen.stamp = Some(now);
+            seen.recheck = recheck_after(now).filter(|_| self.is_folder);
+        } else if seen.recheck.is_some_and(|at| Instant::now() >= at) {
+            seen.recheck = None;
+        } else {
+            return;
         }
+        drop(seen);
+        self.mark_changed();
+        (self.waker)();
     }
 }
 
@@ -266,7 +298,6 @@ fn check_watches() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Instant;
 
     fn wait_for(mut done: impl FnMut() -> bool) -> bool {
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -277,6 +308,29 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         false
+    }
+
+    #[test]
+    fn only_a_recent_time_needs_another_look() {
+        let recently = SystemTime::now();
+        assert!(recheck_after((0, Some(recently))).is_some());
+        let from_the_future = recently + Duration::from_secs(60);
+        assert!(recheck_after((0, Some(from_the_future))).is_some());
+        let long_ago = recently - TIME_GRANULARITY * 2;
+        assert!(recheck_after((0, Some(long_ago))).is_none());
+        assert!(recheck_after((0, None)).is_none());
+    }
+
+    #[test]
+    fn a_folder_with_a_recent_time_is_read_once_more_in_case_it_hid_a_change() {
+        let folder = tempfile::tempdir().unwrap();
+        let watch = Watch::start_from_now(folder.path(), Arc::new(|| {}));
+        // The stamp never changes here, like a change landing within the same tick.
+        assert!(!watch.take_changed());
+        assert!(wait_for(|| watch.take_changed()), "looked again");
+        // Once is enough: by then, any later change alters the time.
+        std::thread::sleep(POLL_INTERVAL * 3);
+        assert!(!watch.take_changed());
     }
 
     #[test]

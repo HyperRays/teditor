@@ -326,9 +326,23 @@ fn scrollback_moves_the_viewport_and_returns_to_the_bottom() {
 fn session_runs_a_real_program_through_the_pty_and_reports_exit() {
     let wakes = Arc::new(AtomicUsize::new(0));
     let counter = wakes.clone();
+    let (shell, input, sizes): (&str, &[u8], &[&str]) = if cfg!(windows) {
+        // Clearing first leaves everything within the ten rows.
+        (
+            "cmd.exe",
+            b"cls & set /a N=40+2 >nul & call echo sum-%N% & mode con | findstr \"Lines Columns\"\r\nexit\r\n",
+            &[" 10", " 60"],
+        )
+    } else {
+        (
+            "/bin/sh",
+            b"stty size; echo sum-$((40+2))\nexit\n",
+            &["10 60"],
+        )
+    };
     let mut session = Session::spawn(
-        &["/bin/sh".into()],
-        Path::new("/"),
+        &[shell.into()],
+        &std::env::temp_dir(),
         [60, 10],
         [FG, BG],
         Arc::new(move || {
@@ -336,7 +350,7 @@ fn session_runs_a_real_program_through_the_pty_and_reports_exit() {
         }),
     )
     .unwrap();
-    session.send(b"stty size; echo sum-$((40+2))\nexit\n".to_vec());
+    session.send(input.to_vec());
     let deadline = Instant::now() + Duration::from_secs(10);
     while !session.exited() {
         assert!(Instant::now() < deadline, "the shell did not exit");
@@ -346,7 +360,9 @@ fn session_runs_a_real_program_through_the_pty_and_reports_exit() {
     while session.pump() {}
     session.vt.sync().unwrap();
     let screen: String = (0..10).map(|y| line(&session.vt, y) + "\n").collect();
-    assert!(screen.contains("10 60"), "pty size not applied: {screen}");
+    for size in sizes {
+        assert!(screen.contains(size), "pty size not applied: {screen}");
+    }
     assert!(screen.contains("sum-42"), "{screen}");
     assert!(wakes.load(Ordering::Relaxed) > 0);
 }

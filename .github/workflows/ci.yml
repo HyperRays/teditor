@@ -85,15 +85,6 @@ jobs:
         run: cargo build --locked --all-targets
 
       - name: Test
-        if: runner.os == 'Linux'
-        timeout-minutes: 20
-        run: cargo test --locked --no-fail-fast
-
-      # Non-blocking until the tests that hard-code /bin/sh support Windows. Check this step's
-      # log, because the job stays green when it fails.
-      - name: Test (non-blocking)
-        if: runner.os == 'Windows'
-        continue-on-error: true
         timeout-minutes: 20
         run: cargo test --locked --no-fail-fast
 

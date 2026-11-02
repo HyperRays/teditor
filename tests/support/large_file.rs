@@ -22,6 +22,21 @@ pub const FILE_MIB: usize = 128;
 pub const PEAK_LIMIT_MIB: usize = 64;
 
 /// The process's peak resident memory so far, in MiB.
+#[cfg(target_os = "linux")]
+pub fn peak_mib() -> usize {
+    // Not `getrusage`, whose peak survives `exec` here and so can be the parent's, such as Cargo's.
+    let status = std::fs::read_to_string("/proc/self/status").unwrap();
+    let kib = status
+        .lines()
+        .find_map(|line| line.strip_prefix("VmHWM:"))
+        .and_then(|value| value.trim().strip_suffix("kB"))
+        .and_then(|kib| kib.trim().parse::<usize>().ok())
+        .expect("the status file reports peak memory");
+    kib / 1024
+}
+
+/// The process's peak resident memory so far, in MiB.
+#[cfg(not(target_os = "linux"))]
 pub fn peak_mib() -> usize {
     // SAFETY: getrusage fills the zeroed structure it is given.
     let usage = unsafe {
