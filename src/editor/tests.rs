@@ -2945,6 +2945,10 @@ fn palette_opened_from_the_terminal_returns_there_and_small_windows_survive() {
 fn terminal_cursor_follows_a_program_that_only_moves_it() {
     let fixture = Fixture::new();
     let mut editor = terminal_editor(&fixture);
+    // Pressing Left needs line editing, which `/bin/sh` lacks where it is dash, as on Ubuntu.
+    editor.shell = ["/bin/bash", "--norc", "--noprofile"]
+        .map(Into::into)
+        .into();
     let mut frame = frame();
     editor.compose(&mut frame);
     send(&mut editor, &mut frame, [cmd("j")]);
