@@ -1,0 +1,11 @@
+# What symbol search leaves out: one name, wildcard or folder path per line, such as
+# vendor, *.min.js or src/generated. A name is matched in every folder. Spaces count as
+# part of a name. A line starting with # only ever matches a file named just like it.
+.git
+.teditor
+target
+node_modules
+.venv
+build
+vendor
+third_party

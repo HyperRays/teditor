@@ -1,0 +1,54 @@
+[package]
+name = "teditor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ab_glyph = "0.2.32"
+bytemuck = { version = "1.25.2", features = ["derive"] }
+blake3 = "1.8"
+chardetng = "1.0"
+encoding_rs = "0.8.35"
+file_type = "0.8.11"
+memmap2 = "0.9.11"
+pollster = "0.4.0"
+png = "0.18.1"
+thiserror = "2.0.21"
+tempfile = "3.23"
+unicode-width = "0.2"
+syntect = { version = "5.3", default-features = false, features = ["default-themes", "regex-onig"] }
+wgpu = "30.0.1"
+winit = "0.30.13"
+unicode-segmentation = "1.13.3"
+harfrust = "0.15.0"
+ttf-parser = "0.25"
+ignore = "0.4.34"
+grep-searcher = "0.1.17"
+grep-regex = "0.1.14"
+grep-matcher = "0.1.9"
+two-face = "0.5"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Console",
+    "Win32_System_Threading",
+] }
+
+[build-dependencies]
+bindgen = "0.72"
+
+[dev-dependencies]
+criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "editor"
+harness = false
+
+[[bench]]
+name = "render"
+harness = false
