@@ -1,0 +1,8 @@
+[submodule "vendor/ghostty"]
+	path = vendor/ghostty
+	url = https://github.com/ghostty-org/ghostty.git
+	shallow = true
+[submodule "vendor/ctags"]
+	path = vendor/ctags
+	url = https://github.com/universal-ctags/ctags.git
+	shallow = true
