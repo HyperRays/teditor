@@ -16,9 +16,26 @@ pub fn read() -> io::Result<String> {
     let (program, args) = command(false)?;
     let output = Command::new(program).args(args).output()?;
     if !output.status.success() {
+        if holds_no_text(&output.stderr) {
+            return Ok(String::new());
+        }
         return Err(io::Error::other("Clipboard is unavailable"));
     }
     String::from_utf8(output.stdout).map_err(io::Error::other)
+}
+/// Whether a failed helper only found no text, which `xclip` and `wl-paste` report as an error
+/// when the clipboard is empty or holds something else, such as an image.
+#[cfg(not(windows))]
+fn holds_no_text(stderr: &[u8]) -> bool {
+    let message = String::from_utf8_lossy(stderr);
+    [
+        "not available",
+        "Nothing is copied",
+        "No selection",
+        "No suitable type",
+    ]
+    .iter()
+    .any(|report| message.contains(report))
 }
 #[cfg(not(windows))]
 pub fn write_with(write: impl FnOnce(&mut dyn Write) -> io::Result<()>) -> io::Result<()> {
@@ -104,6 +121,26 @@ mod tests {
 
     fn units(text: &str) -> Vec<u16> {
         text.encode_utf16().collect()
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn an_empty_clipboard_is_told_apart_from_an_unusable_one() {
+        for empty in [
+            "Error: target STRING not available\n",
+            "Nothing is copied\n",
+            "No selection\n",
+            "No suitable type of content copied\n",
+        ] {
+            assert!(holds_no_text(empty.as_bytes()), "{empty}");
+        }
+        for broken in [
+            "Error: Can't open display: :99\n",
+            "Failed to connect to a Wayland server\n",
+            "",
+        ] {
+            assert!(!holds_no_text(broken.as_bytes()), "{broken}");
+        }
     }
 
     #[test]
